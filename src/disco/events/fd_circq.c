@@ -1,5 +1,7 @@
 #include "fd_circq.h"
 
+#include "../../util/log/fd_log.h"
+
 struct __attribute__((aligned(8UL))) fd_circq_message_private {
   ulong align;
   ulong footprint;
@@ -31,6 +33,9 @@ fd_circq_new( void * shmem,
   circq->head = 0UL;
   circq->tail = 0UL;
   circq->size = sz;
+  circq->cursor = ULONG_MAX;
+  circq->cursor_seq = 0UL;
+  circq->cursor_push_seq = 0UL;
   return shmem;
 }
 
@@ -147,17 +152,60 @@ fd_circq_push_back( fd_circq_t * circq,
   fd_circq_message_t * next_message = (fd_circq_message_t *)(buf+circq->tail);
   next_message->align = align;
   next_message->footprint = footprint;
+  circq->cursor_push_seq++;
   return (uchar *)(next_message+1);
 }
 
 uchar const *
-fd_circq_pop_front( fd_circq_t * circq ) {
-  if( FD_UNLIKELY( !circq->cnt ) ) return NULL;
+fd_circq_cursor_advance( fd_circq_t * circq ) {
+  /* First call or after reset - start from head */
+  if( FD_UNLIKELY( circq->cursor==ULONG_MAX ) ) {
+    if( FD_UNLIKELY( !circq->cnt ) ) return NULL;
+    circq->cursor = circq->head;
+    circq->cursor_seq = circq->cursor_push_seq - circq->cnt;
+  } else {
+    /* Already iterating - move to next */
+    if( FD_UNLIKELY( circq->cursor_seq >= circq->cursor_push_seq ) ) return NULL;
+    
+    uchar * buf = (uchar *)(circq+1);
+    fd_circq_message_t * message = (fd_circq_message_t *)(buf+circq->cursor);
+    circq->cursor = message->next;
+  }
 
-  circq->cnt--;
-  fd_circq_message_t * message = (fd_circq_message_t *)((uchar *)(circq+1)+circq->head);
-  if( FD_UNLIKELY( !circq->cnt ) ) circq->head = circq->tail = 0UL;
-  else                             circq->head = message->next;
-  FD_TEST( circq->head<circq->size );
-  return (uchar *)(message+1);
+  uchar * buf = (uchar *)(circq+1);
+  fd_circq_message_t * current_msg = (fd_circq_message_t *)(buf+circq->cursor);
+  circq->cursor_seq++;
+  return (uchar *)(current_msg+1);
+}
+
+int
+fd_circq_pop_until( fd_circq_t * circq,
+                    ulong        cursor ) {
+  if( FD_UNLIKELY( cursor>=circq->cursor_push_seq ) ) return -1;
+  
+  ulong oldest_seq = circq->cursor_push_seq-circq->cnt;
+  if( FD_UNLIKELY( cursor<oldest_seq ) ) return 0;
+  
+  ulong to_pop = fd_ulong_min( cursor-oldest_seq+1UL, circq->cnt );
+
+  uchar * buf = (uchar *)(circq+1);
+  for( ulong i=0UL; i<to_pop; i++ ) {
+    fd_circq_message_t * message = (fd_circq_message_t *)(buf+circq->head);
+    circq->cnt--;
+    
+    if( FD_UNLIKELY( !circq->cnt ) ) {
+      circq->head = circq->tail = 0UL;
+    } else {
+      circq->head = message->next;
+      FD_TEST( circq->head<circq->size );
+    }
+  }
+
+  circq->cursor = ULONG_MAX;
+  return 0;
+}
+
+void
+fd_circq_reset_cursor( fd_circq_t * circq ) {
+  circq->cursor = ULONG_MAX;
 }

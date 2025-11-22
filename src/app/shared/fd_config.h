@@ -205,6 +205,8 @@ struct fd_config {
   char user[ 256 ];
   char hostname[ FD_LOG_NAME_MAX ];
 
+  int telemetry;
+
   double tick_per_ns_mu;
   double tick_per_ns_sigma;
 
@@ -339,6 +341,11 @@ struct fd_config {
     } bundle;
 
     struct {
+      int report_shreds;
+      int report_transactions;
+    } event;
+
+    struct {
       char affinity[ AFFINITY_SZ ];
       char fake_dst_ip[ 16 ];
     } pktgen;
@@ -437,6 +444,10 @@ struct fd_config {
       char   prometheus_listen_address[ 16 ];
       ushort prometheus_listen_port;
     } metric;
+
+    struct {
+      char url[ 256 ];
+    } event;
 
     struct {
       int    enabled;
