@@ -274,6 +274,7 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t *     ctx,
   uchar * serialized_params            = out;
   uchar * serialized_params_start      = serialized_params;
   uchar * curr_serialized_params_start = serialized_params;
+  ulong   curr_region_vaddr            = 0UL;
 
   /* https://github.com/anza-xyz/agave/blob/v3.0.0/program-runtime/src/serialization.rs#L522 */
   FD_STORE( ulong, serialized_params, ctx->instr->acct_cnt );
@@ -337,11 +338,6 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t *     ctx,
       FD_STORE( uint, serialized_params, padding_0 );
       serialized_params += sizeof(uint);
 
-      /* Compute current region vaddr base for VM address calculation */
-      ulong curr_region_vaddr = *input_mem_regions_cnt == 0U ? 0UL :
-        input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
-        input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
-
       /* https://github.com/anza-xyz/agave/blob/v3.0.0/program-runtime/src/serialization.rs#L532 */
       fd_pubkey_t key = *acc;
       acc_region_metas[i].vm_key_addr = FD_VM_MEM_MAP_INPUT_REGION_START + curr_region_vaddr +
@@ -388,6 +384,11 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t *     ctx,
         stricter_abi_and_runtime_constraints,
         direct_mapping );
 
+      /* write_account may have pushed a new region(s) */
+      curr_region_vaddr = *input_mem_regions_cnt == 0U ? 0UL :
+        input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
+        input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
+
       /* https://github.com/anza-xyz/agave/blob/v3.0.0/program-runtime/src/serialization.rs#L537-L541 */
       FD_STORE( ulong, serialized_params, ULONG_MAX );
       serialized_params += sizeof(ulong);
@@ -401,12 +402,8 @@ fd_bpf_loader_input_serialize_aligned( fd_exec_instr_ctx_t *     ctx,
   serialized_params += sizeof(ulong);
 
   /* https://github.com/anza-xyz/agave/blob/v3.1.1/program-runtime/src/serialization.rs#L568 */
-  ulong region_vaddr_offset = 0UL;
-  if( *input_mem_regions_cnt > 0 ) {
-    region_vaddr_offset = input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
-                          input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
-  }
-  *instr_data_offset = FD_VM_MEM_MAP_INPUT_REGION_START + region_vaddr_offset + (ulong)(serialized_params - curr_serialized_params_start);
+  *instr_data_offset = FD_VM_MEM_MAP_INPUT_REGION_START + curr_region_vaddr +
+   (ulong)(serialized_params - curr_serialized_params_start);
 
   /* https://github.com/anza-xyz/agave/blob/v3.0.0/program-runtime/src/serialization.rs#L559 */
   uchar * instr_data = ctx->instr->data;
@@ -575,6 +572,7 @@ fd_bpf_loader_input_serialize_unaligned( fd_exec_instr_ctx_t *     ctx,
   uchar * serialized_params            = out;
   uchar * serialized_params_start      = serialized_params;
   uchar * curr_serialized_params_start = serialized_params;
+  ulong   curr_region_vaddr            = 0UL;
 
   FD_STORE( ulong, serialized_params, ctx->instr->acct_cnt );
   serialized_params += sizeof(ulong);
@@ -618,11 +616,6 @@ fd_bpf_loader_input_serialize_unaligned( fd_exec_instr_ctx_t *     ctx,
       FD_STORE( uchar, serialized_params, is_writable );
       serialized_params += sizeof(uchar);
 
-      /* Compute current region vaddr base for VM address calculation */
-      ulong curr_region_vaddr = *input_mem_regions_cnt == 0U ? 0UL :
-        input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
-        input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
-
       fd_pubkey_t key = *acc;
       acc_region_metas[i].vm_key_addr = FD_VM_MEM_MAP_INPUT_REGION_START + curr_region_vaddr +
         (ulong)(serialized_params - curr_serialized_params_start);
@@ -648,13 +641,13 @@ fd_bpf_loader_input_serialize_unaligned( fd_exec_instr_ctx_t *     ctx,
         input_mem_regions, input_mem_regions_cnt, acc_region_metas, 1,
         stricter_abi_and_runtime_constraints, direct_mapping );
 
-      /* After write_account, we may be in a new region, so recompute */
-      ulong owner_region_vaddr = *input_mem_regions_cnt == 0U ? 0UL :
+      /* write_account may have pushed a new region(s) */
+      curr_region_vaddr = *input_mem_regions_cnt == 0U ? 0UL :
         input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
         input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
 
       fd_pubkey_t owner = *(fd_pubkey_t *)&metadata->owner;
-      acc_region_metas[i].vm_owner_addr = FD_VM_MEM_MAP_INPUT_REGION_START + owner_region_vaddr +
+      acc_region_metas[i].vm_owner_addr = FD_VM_MEM_MAP_INPUT_REGION_START + curr_region_vaddr +
         (ulong)(serialized_params - curr_serialized_params_start);
       FD_STORE( fd_pubkey_t, serialized_params, owner );
       serialized_params += sizeof(fd_pubkey_t);
@@ -673,12 +666,8 @@ fd_bpf_loader_input_serialize_unaligned( fd_exec_instr_ctx_t *     ctx,
   serialized_params += sizeof(ulong);
 
   /* https://github.com/anza-xyz/agave/blob/v3.1.1/program-runtime/src/serialization.rs#L400 */
-  ulong region_vaddr_offset = 0UL;
-  if( *input_mem_regions_cnt > 0 ) {
-    region_vaddr_offset = input_mem_regions[*input_mem_regions_cnt-1U].vaddr_offset +
-                          input_mem_regions[*input_mem_regions_cnt-1U].address_space_reserved;
-  }
-  *instr_data_offset = FD_VM_MEM_MAP_INPUT_REGION_START + region_vaddr_offset + (ulong)(serialized_params - curr_serialized_params_start);
+  *instr_data_offset = FD_VM_MEM_MAP_INPUT_REGION_START + curr_region_vaddr +
+    (ulong)(serialized_params - curr_serialized_params_start);
 
   uchar * instr_data = (uchar *)ctx->instr->data;
   fd_memcpy( serialized_params, instr_data, instr_data_len );
