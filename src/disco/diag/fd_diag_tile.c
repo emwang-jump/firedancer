@@ -9,11 +9,11 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "generated/fd_cswtch_tile_seccomp.h"
+#include "generated/fd_diag_tile_seccomp.h"
 
 #define REPORT_INTERVAL_MILLIS (100L)
 
-typedef struct {
+struct fd_diag_tile {
   long next_report_nanos;
 
   ulong tile_cnt;
@@ -25,7 +25,9 @@ typedef struct {
   int sched_fds[ FD_TILE_MAX ];
 
   volatile ulong * metrics[ FD_TILE_MAX ];
-} fd_cswtch_ctx_t;
+};
+
+typedef struct fd_diag_tile fd_diag_tile_t;
 
 FD_FN_CONST static inline ulong
 scratch_align( void ) {
@@ -36,7 +38,7 @@ FD_FN_PURE static inline ulong
 scratch_footprint( fd_topo_tile_t const * tile ) {
   (void)tile;
   ulong l = FD_LAYOUT_INIT;
-  l = FD_LAYOUT_APPEND( l, alignof( fd_cswtch_ctx_t ), sizeof( fd_cswtch_ctx_t ) );
+  l = FD_LAYOUT_APPEND( l, alignof( fd_diag_tile_t ), sizeof( fd_diag_tile_t ) );
   return FD_LAYOUT_FINI( l, scratch_align() );
 }
 
@@ -181,7 +183,7 @@ read_sched_file( int              fd,
 }
 
 static void
-before_credit( fd_cswtch_ctx_t *   ctx,
+before_credit( fd_diag_tile_t *    ctx,
                fd_stem_context_t * stem,
                int *               charge_busy ) {
   (void)stem;
@@ -257,7 +259,7 @@ privileged_init( fd_topo_t *      topo,
   void * scratch = fd_topo_obj_laddr( topo, tile->tile_obj_id );
 
   FD_SCRATCH_ALLOC_INIT( l, scratch );
-  fd_cswtch_ctx_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof( fd_cswtch_ctx_t ), sizeof( fd_cswtch_ctx_t ) );
+  fd_diag_tile_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_diag_tile_t), sizeof(fd_diag_tile_t) );
 
   FD_TEST( topo->tile_cnt<FD_TILE_MAX );
 
@@ -357,7 +359,7 @@ unprivileged_init( fd_topo_t *      topo,
   void * scratch = fd_topo_obj_laddr( topo, tile->tile_obj_id );
 
   FD_SCRATCH_ALLOC_INIT( l, scratch );
-  fd_cswtch_ctx_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof( fd_cswtch_ctx_t ), sizeof( fd_cswtch_ctx_t ) );
+  fd_diag_tile_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_diag_tile_t), sizeof(fd_diag_tile_t) );
 
   memset( ctx->first_seen_died, 0, sizeof( ctx->first_seen_died ) );
   ctx->next_report_nanos = fd_log_wallclock();
@@ -384,8 +386,8 @@ populate_allowed_seccomp( fd_topo_t const *      topo,
   (void)topo;
   (void)tile;
 
-  populate_sock_filter_policy_fd_cswtch_tile( out_cnt, out, (uint)fd_log_private_logfile_fd() );
-  return sock_filter_policy_fd_cswtch_tile_instr_cnt;
+  populate_sock_filter_policy_fd_diag_tile( out_cnt, out, (uint)fd_log_private_logfile_fd() );
+  return sock_filter_policy_fd_diag_tile_instr_cnt;
 }
 
 static ulong
@@ -396,7 +398,7 @@ populate_allowed_fds( fd_topo_t const *      topo,
   void * scratch = fd_topo_obj_laddr( topo, tile->tile_obj_id );
 
   FD_SCRATCH_ALLOC_INIT( l, scratch );
-  fd_cswtch_ctx_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof( fd_cswtch_ctx_t ), sizeof( fd_cswtch_ctx_t ) );
+  fd_diag_tile_t * ctx = FD_SCRATCH_ALLOC_APPEND( l, alignof(fd_diag_tile_t), sizeof(fd_diag_tile_t) );
 
   if( FD_UNLIKELY( out_fds_cnt<2UL+2UL*ctx->tile_cnt ) ) FD_LOG_ERR(( "out_fds_cnt %lu", out_fds_cnt ));
 
@@ -414,15 +416,15 @@ populate_allowed_fds( fd_topo_t const *      topo,
 #define STEM_BURST (1UL)
 #define STEM_LAZY  ((long)10e6) /* 10ms */
 
-#define STEM_CALLBACK_CONTEXT_TYPE  fd_cswtch_ctx_t
-#define STEM_CALLBACK_CONTEXT_ALIGN alignof(fd_cswtch_ctx_t)
+#define STEM_CALLBACK_CONTEXT_TYPE  fd_diag_tile_t
+#define STEM_CALLBACK_CONTEXT_ALIGN alignof(fd_diag_tile_t)
 
 #define STEM_CALLBACK_BEFORE_CREDIT before_credit
 
 #include "../../disco/stem/fd_stem.c"
 
-fd_topo_run_tile_t fd_tile_cswtch = {
-  .name                     = "cswtch",
+fd_topo_run_tile_t fd_tile_diag = {
+  .name                     = "diag",
   .populate_allowed_seccomp = populate_allowed_seccomp,
   .populate_allowed_fds     = populate_allowed_fds,
   .scratch_align            = scratch_align,
