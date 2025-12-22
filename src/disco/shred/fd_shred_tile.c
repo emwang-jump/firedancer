@@ -819,54 +819,7 @@ after_frag( fd_shred_ctx_t *    ctx,
   }
 
   if( FD_UNLIKELY( ctx->in_kind[ in_idx ]==IN_KIND_REPAIR ) ) {
-    FD_MCNT_INC( SHRED, FORCE_COMPLETE_REQUEST, 1UL );
-    fd_ed25519_sig_t const * shred_sig = (fd_ed25519_sig_t const *)fd_type_pun( ctx->shred_buffer );
-    if( FD_UNLIKELY( fd_fec_resolver_done_contains( ctx->resolver, shred_sig ) ) ) {
-      /* This is a FEC completion message from the repair tile.  We need
-         to make sure that we don't force complete something that's just
-         been completed. */
-      FD_MCNT_INC( SHRED, FORCE_COMPLETE_FAILURE, 1UL );
-      return;
-    }
-
-    uint last_idx = fd_disco_repair_shred_sig_last_shred_idx( sig );
-    uchar buf_last_shred[FD_SHRED_MIN_SZ];
-    int rv = fd_fec_resolver_shred_query( ctx->resolver, shred_sig, last_idx, buf_last_shred );
-    if( FD_UNLIKELY( rv != FD_FEC_RESOLVER_SHRED_OKAY ) ) {
-
-      /* We will hit this case if FEC is no longer in curr_map, or if
-         the shred signature is invalid, which is okay.
-
-         There's something of a race condition here.  It's possible (but
-         very unlikely) that between when the repair tile observed the
-         FEC set needed to be force completed and now, the FEC set was
-         completed, and then so many additional FEC sets were completed
-         that it fell off the end of the done list.  In that case
-         fd_fec_resolver_done_contains would have returned false, but
-         fd_fec_resolver_shred_query will not return OKAY, which means
-         we'll end up in this block of code.  If the FEC set was
-         completed, then there's nothing we need to do.  If it was
-         spilled, then we'll need to re-repair all the shreds in the FEC
-         set, but it's not fatal. */
-
-      FD_MCNT_INC( SHRED, FORCE_COMPLETE_FAILURE, 1UL );
-      return;
-    }
-    fd_shred_t * out_last_shred = (fd_shred_t *)fd_type_pun( buf_last_shred );
-
-    fd_fec_set_t const * out_fec_set[1];
-    rv = fd_fec_resolver_force_complete( ctx->resolver, out_last_shred, out_fec_set, &ctx->out_merkle_roots[0] );
-    if( FD_UNLIKELY( rv != FD_FEC_RESOLVER_SHRED_COMPLETES ) ) {
-      FD_BASE58_ENCODE_32_BYTES( *shred_sig, shred_sig_b58 );
-      FD_LOG_WARNING(( "Shred tile %lu cannot force complete the slot %lu fec_set_idx %u last_idx %u %s", ctx->round_robin_id, out_last_shred->slot, out_last_shred->fec_set_idx, last_idx, shred_sig_b58 ));
-      FD_MCNT_INC( SHRED, FORCE_COMPLETE_FAILURE, 1UL );
-      return;
-    }
-    FD_MCNT_INC( SHRED, FORCE_COMPLETE_SUCCESS, 1UL );
-    FD_TEST( ctx->fec_sets <= *out_fec_set );
-    ctx->send_fec_set_idx[ 0UL ] = (ulong)(*out_fec_set - ctx->fec_sets);
-    ctx->send_fec_set_cnt = 1UL;
-    ctx->shredded_txn_cnt = 0UL;
+    return;
   }
 
   ulong fanout = 200UL; /* Default Agave's DATA_PLANE_FANOUT = 200UL */
@@ -971,10 +924,10 @@ after_frag( fd_shred_ctx_t *    ctx,
     fd_fec_set_t * set = ctx->fec_sets + ctx->send_fec_set_idx[ fset_k ];
     fd_shred34_t * s34 = ctx->shred34 + 4UL*ctx->send_fec_set_idx[ fset_k ];
 
-    s34[ 0 ].shred_cnt =                         fd_ulong_min( set->data_shred_cnt,   34UL );
-    s34[ 1 ].shred_cnt = set->data_shred_cnt   - fd_ulong_min( set->data_shred_cnt,   34UL );
-    s34[ 2 ].shred_cnt =                         fd_ulong_min( set->parity_shred_cnt, 34UL );
-    s34[ 3 ].shred_cnt = set->parity_shred_cnt - fd_ulong_min( set->parity_shred_cnt, 34UL );
+    s34[ 0 ].shred_cnt = FD_REEDSOL_DATA_SHREDS_MAX;
+    s34[ 1 ].shred_cnt = 0;
+    s34[ 2 ].shred_cnt = FD_REEDSOL_PARITY_SHREDS_MAX;
+    s34[ 3 ].shred_cnt = 0;
 
     ulong s34_cnt     = 2UL + !!(s34[ 1 ].shred_cnt) + !!(s34[ 3 ].shred_cnt);
     ulong txn_per_s34 = fd_ulong_if( fset_k<( ctx->send_fec_set_cnt - 1UL ), shredded_txn_cnt_per_fec_set, shredded_txn_cnt_last_fec_set ) / s34_cnt;
@@ -991,7 +944,7 @@ after_frag( fd_shred_ctx_t *    ctx,
     ulong sz2 = sizeof(fd_shred34_t) - (34UL - s34[ 2 ].shred_cnt)*FD_SHRED_MAX_SZ;
     ulong sz3 = sizeof(fd_shred34_t) - (34UL - s34[ 3 ].shred_cnt)*FD_SHRED_MAX_SZ;
 
-    fd_shred_t const * last = (fd_shred_t const *)fd_type_pun_const( set->data_shreds[ set->data_shred_cnt - 1 ] );
+    fd_shred_t const * last = (fd_shred_t const *)fd_type_pun_const( set->data_shreds[ FD_REEDSOL_DATA_SHREDS_MAX - 1 ] );
 
     /* Compute merkle root and chained merkle root. */
 
@@ -1021,7 +974,7 @@ after_frag( fd_shred_ctx_t *    ctx,
         return;
       }
 
-      for( ulong i=0UL; i<set->data_shred_cnt; i++ ) {
+      for( ulong i=0UL; i<FD_REEDSOL_DATA_SHREDS_MAX; i++ ) {
         fd_shred_t * data_shred = (fd_shred_t *)fd_type_pun( set->data_shreds[i] );
         ulong        payload_sz = fd_shred_payload_sz( data_shred );
         if( FD_UNLIKELY( fec->data_sz + payload_sz > FD_STORE_DATA_MAX ) ) {
@@ -1078,7 +1031,7 @@ after_frag( fd_shred_ctx_t *    ctx,
 
       int is_leader_fec = ctx->in_kind[ in_idx ]==IN_KIND_POH;
 
-      ulong   sig   = fd_disco_shred_out_fec_sig( last->slot, last->fec_set_idx, (uint)set->data_shred_cnt, last->data.flags & FD_SHRED_DATA_FLAG_SLOT_COMPLETE, last->data.flags & FD_SHRED_DATA_FLAG_DATA_COMPLETE );
+      ulong   sig   = fd_disco_shred_out_fec_sig( last->slot, last->fec_set_idx, FD_REEDSOL_DATA_SHREDS_MAX, last->data.flags & FD_SHRED_DATA_FLAG_SLOT_COMPLETE, last->data.flags & FD_SHRED_DATA_FLAG_DATA_COMPLETE );
       uchar * chunk = fd_chunk_to_laddr( ctx->shred_out_mem, ctx->shred_out_chunk );
       memcpy( chunk,                                                         last,                                                FD_SHRED_DATA_HEADER_SZ );
       memcpy( chunk+FD_SHRED_DATA_HEADER_SZ,                                 ctx->out_merkle_roots[fset_k].hash,                  FD_SHRED_MERKLE_ROOT_SZ );
@@ -1109,9 +1062,9 @@ after_frag( fd_shred_ctx_t *    ctx,
 
     fd_shred_t const * new_shreds[ FD_REEDSOL_DATA_SHREDS_MAX+FD_REEDSOL_PARITY_SHREDS_MAX ];
     ulong k=0UL;
-    for( ulong i=0UL; i<set->data_shred_cnt; i++ )
+    for( ulong i=0UL; i<FD_REEDSOL_DATA_SHREDS_MAX; i++ )
       if( !d_rcvd_test( set->data_shred_rcvd,   i ) )  new_shreds[ k++ ] = (fd_shred_t const *)set->data_shreds  [ i ];
-    for( ulong i=0UL; i<set->parity_shred_cnt; i++ )
+    for( ulong i=0UL; i<FD_REEDSOL_PARITY_SHREDS_MAX; i++ )
       if( !p_rcvd_test( set->parity_shred_rcvd, i ) )  new_shreds[ k++ ] = (fd_shred_t const *)set->parity_shreds[ i ];
 
     if( FD_UNLIKELY( !k ) ) return;
