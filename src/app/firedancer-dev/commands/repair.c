@@ -761,8 +761,7 @@ repair_cmd_fn_catchup( args_t *   args,
 static void
 repair_cmd_fn_metrics( args_t *   args,
                        config_t * config ) {
-  memset( &config->topo, 0, sizeof(config->topo) );
-  fd_topo_initialize( config );
+  //memset( &config->topo, 0, sizeof(config->topo) );
 
   fd_log_private_shared_lock[ 1 ] = 0;
   fd_topo_join_workspaces( &config->topo, FD_SHMEM_JOIN_MODE_READ_ONLY );
