@@ -380,9 +380,9 @@ fd_fec_resolver_add_shred( fd_fec_resolver_t         * resolver,
       return FD_FEC_RESOLVER_SHRED_REJECTED;
   }
 
-  if( FD_UNLIKELY( ( shred->fec_set_idx % FD_REEDSOL_DATA_SHREDS_MAX ) != 0UL ) ) {
+  if( FD_UNLIKELY( ( shred->fec_set_idx % FD_REEDSOL_DATA_SHREDS_MAX ) != 0UL || shred->idx - shred->fec_set_idx >= FD_REEDSOL_DATA_SHREDS_MAX ) ) {
     FD_BASE58_ENCODE_32_BYTES( leader_pubkey, s );
-    FD_LOG_WARNING(( "shred->fec_set_idx %u slot %lu mod FD_REEDSOL_DATA_SHREDS_MAX != 0. leader %s", shred->fec_set_idx, shred->slot, s ) );
+    FD_LOG_WARNING(( "shred->fec_set_idx %u slot %lu idx %u. leader %s", shred->fec_set_idx, shred->slot, shred->idx, s ) );
     return FD_FEC_RESOLVER_SHRED_REJECTED;
   }
 
