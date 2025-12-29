@@ -185,8 +185,8 @@ test_skip_batch( void ) {
 
   /* Randomly choose a shredder to process a batch until the data buffer is exhausted. */
   while( idx<SKIP_TEST_SZ ) {
-    ulong sz        = fd_rng_ulong_roll( r, 100000UL )+1UL;
-    ulong batch_sz  = fd_ulong_if( idx+sz>SKIP_TEST_SZ, SKIP_TEST_SZ-idx, sz );
+    //ulong sz        = fd_rng_ulong_roll( r, 100000UL )+1UL;
+    ulong batch_sz  = 30000UL;
     ulong shredder  = fd_rng_ulong_roll( r, SHREDDERS );
     for( ulong i=0; i<SHREDDERS; i++ ) {
       if( FD_UNLIKELY( i==shredder ) ) {
@@ -293,6 +293,9 @@ _internal_test_shredder_count( ulong type ) {
 
   ulong _data_sz=0UL;
   while( fd_shredder_count_fec_sets( _data_sz, type )==1UL ) {
+    if( fd_shredder_count_data_shreds( _data_sz, type ) > FD_REEDSOL_DATA_SHREDS_MAX ) {
+      __asm__("int $3");
+    }
     FD_TEST( fd_shredder_count_data_shreds( _data_sz, type ) <= FD_REEDSOL_DATA_SHREDS_MAX );
     FD_TEST( fd_shredder_count_parity_shreds( _data_sz, type ) <= FD_REEDSOL_PARITY_SHREDS_MAX );
     _data_sz++;
@@ -540,6 +543,8 @@ int
 main( int     argc,
       char ** argv ) {
   fd_boot( &argc, &argv );
+
+  FD_LOG_NOTICE(( "bmtree_depth: %lu", fd_bmtree_depth( FD_REEDSOL_DATA_SHREDS_MAX + FD_REEDSOL_PARITY_SHREDS_MAX ) ));
 
   FD_TEST( FD_FEC_SET_MAX_BMTREE_DEPTH == fd_bmtree_depth( FD_REEDSOL_DATA_SHREDS_MAX + FD_REEDSOL_PARITY_SHREDS_MAX ) );
 

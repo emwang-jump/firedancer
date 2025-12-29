@@ -98,7 +98,7 @@
 
 #define DCACHE_ENTRIES_PER_FEC_SET (4UL)
 FD_STATIC_ASSERT( sizeof(fd_shred34_t) < USHORT_MAX, shred_34 );
-FD_STATIC_ASSERT( 34*DCACHE_ENTRIES_PER_FEC_SET >= FD_REEDSOL_DATA_SHREDS_MAX+FD_REEDSOL_PARITY_SHREDS_MAX, shred_34 );
+FD_STATIC_ASSERT( 34*DCACHE_ENTRIES_PER_FEC_SET >= FD_REEDSOL_FEC_SHRED_CNT+FD_REEDSOL_FEC_SHRED_CNT, shred_34 );
 FD_STATIC_ASSERT( sizeof(fd_shred34_t) == FD_SHRED_STORE_MTU, shred_34 );
 
 FD_STATIC_ASSERT( sizeof(fd_entry_batch_meta_t)==56UL, poh_shred_mtu );
@@ -253,7 +253,7 @@ typedef struct {
 
   fd_shred_features_activation_t features_activation[1];
   /* too large to be left in the stack */
-  fd_shred_dest_idx_t scratchpad_dests[ FD_SHRED_DEST_MAX_FANOUT*(FD_REEDSOL_DATA_SHREDS_MAX+FD_REEDSOL_PARITY_SHREDS_MAX) ];
+  fd_shred_dest_idx_t scratchpad_dests[ FD_SHRED_DEST_MAX_FANOUT*(FD_REEDSOL_FEC_SHRED_CNT+FD_REEDSOL_FEC_SHRED_CNT) ];
 
   uchar * chained_merkle_root;
   fd_bmtree_node_t out_merkle_roots[ FD_SHRED_BATCH_FEC_SETS_MAX ];
@@ -924,9 +924,9 @@ after_frag( fd_shred_ctx_t *    ctx,
     fd_fec_set_t * set = ctx->fec_sets + ctx->send_fec_set_idx[ fset_k ];
     fd_shred34_t * s34 = ctx->shred34 + 4UL*ctx->send_fec_set_idx[ fset_k ];
 
-    s34[ 0 ].shred_cnt = FD_REEDSOL_DATA_SHREDS_MAX;
+    s34[ 0 ].shred_cnt = FD_REEDSOL_FEC_SHRED_CNT;
     s34[ 1 ].shred_cnt = 0;
-    s34[ 2 ].shred_cnt = FD_REEDSOL_PARITY_SHREDS_MAX;
+    s34[ 2 ].shred_cnt = FD_REEDSOL_FEC_SHRED_CNT;
     s34[ 3 ].shred_cnt = 0;
 
     ulong s34_cnt     = 2UL + !!(s34[ 1 ].shred_cnt) + !!(s34[ 3 ].shred_cnt);
@@ -944,7 +944,7 @@ after_frag( fd_shred_ctx_t *    ctx,
     ulong sz2 = sizeof(fd_shred34_t) - (34UL - s34[ 2 ].shred_cnt)*FD_SHRED_MAX_SZ;
     ulong sz3 = sizeof(fd_shred34_t) - (34UL - s34[ 3 ].shred_cnt)*FD_SHRED_MAX_SZ;
 
-    fd_shred_t const * last = (fd_shred_t const *)fd_type_pun_const( set->data_shreds[ FD_REEDSOL_DATA_SHREDS_MAX - 1 ] );
+    fd_shred_t const * last = (fd_shred_t const *)fd_type_pun_const( set->data_shreds[ FD_REEDSOL_FEC_SHRED_CNT - 1 ] );
 
     /* Compute merkle root and chained merkle root. */
 
@@ -974,7 +974,7 @@ after_frag( fd_shred_ctx_t *    ctx,
         return;
       }
 
-      for( ulong i=0UL; i<FD_REEDSOL_DATA_SHREDS_MAX; i++ ) {
+      for( ulong i=0UL; i<FD_REEDSOL_FEC_SHRED_CNT; i++ ) {
         fd_shred_t * data_shred = (fd_shred_t *)fd_type_pun( set->data_shreds[i] );
         ulong        payload_sz = fd_shred_payload_sz( data_shred );
         if( FD_UNLIKELY( fec->data_sz + payload_sz > FD_STORE_DATA_MAX ) ) {
@@ -1031,7 +1031,7 @@ after_frag( fd_shred_ctx_t *    ctx,
 
       int is_leader_fec = ctx->in_kind[ in_idx ]==IN_KIND_POH;
 
-      ulong   sig   = fd_disco_shred_out_fec_sig( last->slot, last->fec_set_idx, FD_REEDSOL_DATA_SHREDS_MAX, last->data.flags & FD_SHRED_DATA_FLAG_SLOT_COMPLETE, last->data.flags & FD_SHRED_DATA_FLAG_DATA_COMPLETE );
+      ulong   sig   = fd_disco_shred_out_fec_sig( last->slot, last->fec_set_idx, FD_REEDSOL_FEC_SHRED_CNT, last->data.flags & FD_SHRED_DATA_FLAG_SLOT_COMPLETE, last->data.flags & FD_SHRED_DATA_FLAG_DATA_COMPLETE );
       uchar * chunk = fd_chunk_to_laddr( ctx->shred_out_mem, ctx->shred_out_chunk );
       memcpy( chunk,                                                         last,                                                FD_SHRED_DATA_HEADER_SZ );
       memcpy( chunk+FD_SHRED_DATA_HEADER_SZ,                                 ctx->out_merkle_roots[fset_k].hash,                  FD_SHRED_MERKLE_ROOT_SZ );
@@ -1060,11 +1060,11 @@ after_frag( fd_shred_ctx_t *    ctx,
 
     /* Compute all the destinations for all the new shreds */
 
-    fd_shred_t const * new_shreds[ FD_REEDSOL_DATA_SHREDS_MAX+FD_REEDSOL_PARITY_SHREDS_MAX ];
+    fd_shred_t const * new_shreds[ FD_REEDSOL_FEC_SHRED_CNT+FD_REEDSOL_FEC_SHRED_CNT ];
     ulong k=0UL;
-    for( ulong i=0UL; i<FD_REEDSOL_DATA_SHREDS_MAX; i++ )
+    for( ulong i=0UL; i<FD_REEDSOL_FEC_SHRED_CNT; i++ )
       if( !d_rcvd_test( set->data_shred_rcvd,   i ) )  new_shreds[ k++ ] = (fd_shred_t const *)set->data_shreds  [ i ];
-    for( ulong i=0UL; i<FD_REEDSOL_PARITY_SHREDS_MAX; i++ )
+    for( ulong i=0UL; i<FD_REEDSOL_FEC_SHRED_CNT; i++ )
       if( !p_rcvd_test( set->parity_shred_rcvd, i ) )  new_shreds[ k++ ] = (fd_shred_t const *)set->parity_shreds[ i ];
 
     if( FD_UNLIKELY( !k ) ) return;
@@ -1207,8 +1207,8 @@ unprivileged_init( fd_topo_t *      topo,
 
     uchar ** data_shred   = fec_sets[ i ].data_shreds;
     uchar ** parity_shred = fec_sets[ i ].parity_shreds;
-    for( ulong j=0UL; j<FD_REEDSOL_DATA_SHREDS_MAX;   j++ ) data_shred  [ j ] = p34_base[       j/34UL ].pkts[ j%34UL ].buffer;
-    for( ulong j=0UL; j<FD_REEDSOL_PARITY_SHREDS_MAX; j++ ) parity_shred[ j ] = p34_base[ 2UL + j/34UL ].pkts[ j%34UL ].buffer;
+    for( ulong j=0UL; j<FD_REEDSOL_FEC_SHRED_CNT; j++ ) data_shred  [ j ] = p34_base[       j/34UL ].pkts[ j%34UL ].buffer;
+    for( ulong j=0UL; j<FD_REEDSOL_FEC_SHRED_CNT; j++ ) parity_shred[ j ] = p34_base[ 2UL + j/34UL ].pkts[ j%34UL ].buffer;
   }
 
 #define NONNULL( x ) (__extension__({                                        \

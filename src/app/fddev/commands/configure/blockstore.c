@@ -81,8 +81,8 @@ init( config_t const * config ) {
     fec.data_shreds  [ i ] = data.pkts  [ i ].buffer;
     fec.parity_shreds[ i ] = parity.pkts[ i ].buffer;
   }
-  for( ulong i=34UL; i<FD_REEDSOL_DATA_SHREDS_MAX;   i++ ) fec.data_shreds  [ i ] = NULL;
-  for( ulong i=34UL; i<FD_REEDSOL_PARITY_SHREDS_MAX; i++ ) fec.parity_shreds[ i ] = NULL;
+  for( ulong i=34UL; i<FD_REEDSOL_FEC_SHRED_CNT; i++ ) fec.data_shreds  [ i ] = NULL;
+  for( ulong i=34UL; i<FD_REEDSOL_FEC_SHRED_CNT; i++ ) fec.parity_shreds[ i ] = NULL;
 
   fd_entry_batch_meta_t meta[ 1 ] = {{
     .parent_offset  = 0UL,
