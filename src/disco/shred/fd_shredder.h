@@ -14,7 +14,7 @@
 #define FD_SHREDDER_MAX_STAKE_WEIGHTS (1UL<<20)
 
 
-#define FD_FEC_SET_MAX_BMTREE_DEPTH (7UL) /* ceil(log2(DATA_SHREDS_MAX + PARITY_SHREDS_MAX)) */
+#define FD_FEC_SET_MAX_BMTREE_DEPTH (9UL) /* ceil(log2(DATA_SHREDS_MAX + PARITY_SHREDS_MAX)) */
 
 #define FD_SHREDDER_ALIGN     (  128UL)
 /* FD_SHREDDER_FOOTPRINT is not provided because it depends on the footprint
