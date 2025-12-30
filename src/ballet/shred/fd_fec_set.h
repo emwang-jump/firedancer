@@ -20,8 +20,8 @@ typedef struct fd_shred fd_shred_t;
    have to receive or reconstruct the whole thing.  */
 
 struct fd_fec_set {
-  ulong data_shred_cnt;   /* In practice always FD_REEDSOL_DATA_SHREDS_MAX */
-  ulong parity_shred_cnt; /* In practice always FD_REEDSOL_PARITY_SHREDS_MAX */
+  ulong data_shred_cnt;   /* In practice always FD_REEDSOL_FEC_SHRED_CNT */
+  ulong parity_shred_cnt; /* In practice always FD_REEDSOL_FEC_SHRED_CNT */
 
   d_rcvd_t data_shred_rcvd  [ d_rcvd_word_cnt ];
   p_rcvd_t parity_shred_rcvd[ p_rcvd_word_cnt ];
