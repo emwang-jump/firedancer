@@ -493,6 +493,8 @@ fd_fec_resolver_add_shred( fd_fec_resolver_t         * resolver,
     ctx->tree = tree;
     ctx->root = *_root;
     ctx->fec_set_idx = shred->fec_set_idx;
+    ctx->set->data_shred_cnt = FD_REEDSOL_FEC_SHRED_CNT;
+    ctx->set->parity_shred_cnt = FD_REEDSOL_FEC_SHRED_CNT;
     ctx->total_rx_shred_cnt = 0UL;
     ctx->data_variant   = fd_uchar_if(  is_data_shred, variant, fd_shred_variant( fd_shred_swap_type( shred_type ), (uchar)tree_depth ) );
     ctx->parity_variant = fd_uchar_if( !is_data_shred, variant, fd_shred_variant( fd_shred_swap_type( shred_type ), (uchar)tree_depth ) );
